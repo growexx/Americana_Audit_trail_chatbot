@@ -1,0 +1,39 @@
+{
+    "FULL_DATE": {
+      "type": "DATE"
+    },
+  
+    "CALENDAR_YEAR": {
+      "type": "NUMBER(4,0)"
+    },
+  
+    "CALENDAR_QUARTER": {
+      "type": "VARCHAR2(2)",
+      "values": ["Q1", "Q2", "Q3", "Q4"]
+    },
+  
+    "CALENDAR_MONTH": {
+      "type": "VARCHAR2(3)",
+      "values": [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+      ]
+    },
+  
+    "MONTH_NAME": {
+      "type": "VARCHAR2(15)",
+      "values": [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+      ]
+    },
+  
+    "MONTH_NUMBER": {
+      "type": "NUMBER(2,0)"
+    },
+  
+    "FISCAL_YEAR": {
+      "type": "NUMBER(4,0)"
+    }
+  }
+  

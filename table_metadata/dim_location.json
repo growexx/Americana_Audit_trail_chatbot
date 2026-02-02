@@ -1,0 +1,38 @@
+{
+    "CITY": {
+      "type": "VARCHAR2(50)",
+      "values": [
+        "Dubai",
+        "Abu Dhabi",
+        "Sharjah",
+        "Ajman",
+        "Ras Al Khaimah"
+      ]
+    },
+  
+    "EMIRATE": {
+      "type": "VARCHAR2(50)",
+      "values": [
+        "Dubai",
+        "Abu Dhabi",
+        "Sharjah",
+        "Ajman",
+        "Ras Al Khaimah"
+      ]
+    },
+  
+    "COUNTRY": {
+      "type": "VARCHAR2(50)",
+      "values": [
+        "UAE"
+      ]
+    },
+  
+    "REGION": {
+      "type": "VARCHAR2(50)",
+      "values": [
+        "GCC"
+      ]
+    }
+  }
+  

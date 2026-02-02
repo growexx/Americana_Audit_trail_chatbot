@@ -1,0 +1,66 @@
+{
+    "LEAD_DATE": {
+      "type": "DATE"
+    },
+  
+    "DEVELOPER": {
+      "type": "VARCHAR2(50)",
+      "values": [
+        "Nakheel",
+        "Sobha",
+        "Aldar",
+        "Danube",
+        "Emaar",
+        "Damac"
+      ]
+    },
+  
+    "PROJECT": {
+      "type": "VARCHAR2(100)",
+      "values": [
+        "Reem Island Living",
+        "Business Bay Towers",
+        "JVC Residences",
+        "Dubai Hills Estate",
+        "Saadiyat Grove",
+        "Yas Island Living",
+        "Downtown Views",
+        "Creek Harbour",
+        "Palm Jumeirah Residences",
+        "Marina Heights"
+      ]
+    },
+  
+    "CITY": {
+      "type": "VARCHAR2(50)",
+      "values": [
+        "Abu Dhabi",
+        "Dubai",
+        "Sharjah"
+      ]
+    },
+  
+    "LEAD_SOURCE": {
+      "type": "VARCHAR2(50)",
+      "values": [
+        "Broker",
+        "Channel Partner",
+        "Walk-in",
+        "Referral",
+        "Digital Ads"
+      ]
+    },
+  
+    "ENQUIRIES": {
+      "type": "NUMBER(6,0)"
+    },
+  
+    "SITE_VISITS": {
+      "type": "NUMBER(6,0)"
+    },
+  
+    "BOOKINGS": {
+      "type": "NUMBER(6,0)"
+    }
+  }
+  

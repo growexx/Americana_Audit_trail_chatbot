@@ -1,0 +1,113 @@
+{
+    "SALES_DATE": {
+      "type": "DATE"
+    },
+  
+    "SALES_YEAR": {
+      "type": "NUMBER(4,0)",
+      "values": [2023, 2024]
+    },
+  
+    "SALES_QUARTER": {
+      "type": "VARCHAR2(2)",
+      "values": ["Q1", "Q2", "Q3", "Q4"]
+    },
+  
+    "SALES_MONTH": {
+      "type": "VARCHAR2(3)",
+      "values": [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+      ]
+    },
+  
+    "DEVELOPER": {
+      "type": "VARCHAR2(50)",
+      "values": [
+        "Nakheel",
+        "Sobha",
+        "Aldar",
+        "Danube",
+        "Emaar",
+        "Damac"
+      ]
+    },
+  
+    "PROJECT": {
+      "type": "VARCHAR2(100)",
+      "values": [
+        "Reem Island Living",
+        "Business Bay Towers",
+        "JVC Residences",
+        "Dubai Hills Estate",
+        "Saadiyat Grove",
+        "Yas Island Living",
+        "Downtown Views",
+        "Creek Harbour",
+        "Palm Jumeirah Residences",
+        "Marina Heights"
+      ]
+    },
+  
+    "CITY": {
+      "type": "VARCHAR2(50)",
+      "values": [
+        "Abu Dhabi",
+        "Sharjah",
+        "Dubai"
+      ]
+    },
+  
+    "PROPERTY_TYPE": {
+      "type": "VARCHAR2(30)",
+      "values": [
+        "Residential",
+        "Commercial"
+      ]
+    },
+  
+    "UNIT_TYPE": {
+      "type": "VARCHAR2(20)",
+      "values": [
+        "Studio",
+        "1BHK",
+        "2BHK",
+        "3BHK",
+        "Retail",
+        "Office"
+      ]
+    },
+  
+    "CONSTRUCTION_STATUS": {
+      "type": "VARCHAR2(30)",
+      "values": [
+        "Ready",
+        "Under Construction"
+      ]
+    },
+  
+    "UNITS_SOLD": {
+      "type": "NUMBER(6,0)"
+    },
+  
+    "AVG_SQFT": {
+      "type": "NUMBER(10,2)"
+    },
+  
+    "PRICE_PER_SQFT": {
+      "type": "NUMBER(10,2)"
+    },
+  
+    "SALES_VALUE_CR": {
+      "type": "NUMBER(12,2)"
+    },
+  
+    "GROSS_PROFIT_CR": {
+      "type": "NUMBER(12,2)"
+    },
+    "SOURCE_FILES":{
+      "type":"VARCHAR2(30)",
+      "values":["Base"]
+    }
+  }
+  

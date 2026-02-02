@@ -1,0 +1,36 @@
+{
+    "PROJECT_ID": {
+      "type": "NUMBER(6,0)"
+    },
+  
+    "PROJECT_NAME": {
+      "type": "VARCHAR2(100)",
+      "values": ["Yas Island Living","Downtown Views","Creek Harbour","Palm Jumeirah Residences","Marina Heights","Reem Island Living","Business Bay Towers","JVC Residences","Dubai Hills Estate","Saadiyat Grove"]
+    },
+  
+    "DEVELOPER": {
+      "type": "VARCHAR2(50)",
+      "values": ["Nakheel","Sobha","Aldar","Danube","Emaar","Damac"]
+    },
+  
+    "CITY": {
+      "type": "VARCHAR2(50)",
+      "values": ["Abu Dhabi","Dubai","Sharjah"]
+    },
+  
+    "PROPERTY_TYPE": {
+      "type": "VARCHAR2(30)",
+      "values": ["Residential","Commercial"]
+    },
+  
+    "CONSTRUCTION_STATUS": {
+      "type": "VARCHAR2(30)",
+      "values": ["Ready","Under Construction"]
+    },
+  
+    "LAUNCH_DATE": {
+      "type": "DATE",
+      "values":["01-01-22"]
+    }
+  }
+  
