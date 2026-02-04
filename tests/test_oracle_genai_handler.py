@@ -125,7 +125,7 @@ def test_inference_from_chat_history_success(
         [{"role": "USER", "message": "Hello", "timestamp": ""}]
     )
 
-    assert response == "Mock LLM response"
+    assert response[0] == "Mock LLM response"
     mock_oci_client.chat.assert_called_once()
 
 
@@ -187,7 +187,7 @@ def test_inference_simple(
 
     response = client.inference_simple("Hello", system_prompt="System")
 
-    assert response == "Mock LLM response"
+    assert response[0] == "Mock LLM response"
 
 
 @patch("code_modules.oracle_genai_handler.oci.config.from_file")
@@ -205,7 +205,7 @@ def test_inference_single_input(
 
     response = client.inference_single_input("Hello", "System prompt")
 
-    assert response == "Mock LLM response"
+    assert response[0] == "Mock LLM response"
 
 
 # -----------------------------

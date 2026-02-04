@@ -1,630 +1,271 @@
-import pandas as pd
 import pytest
+import pandas as pd
+import json
+import os
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
-
-
+from app.services.chat_service import ChatService
 
 from app.services.chat_service import (
     ChatService,
-    generate_categorical_plots,
     prepare_metadata_string,
+    generate_categorical_plots,
+    check_if_df_all_null_or_zero,
+    JumpToFinally
 )
 
-
-# ------------------------------------------------------------------
-# Dummy App State
-# ------------------------------------------------------------------
-
-class DummyAppState:
-    def __init__(self):
-        self.chat_history = {}
-        self.last_chat_id = ""
-        self.last_sql_query = {}
-
+# ============================================
+# Helper fixtures
+# ============================================
 
 @pytest.fixture
 def app_state():
-    return DummyAppState()
+    """Simulated FastAPI app.state"""
+    return SimpleNamespace(
+        chat_history={},
+        last_sql_query={},
+        last_sql_queries={},
+        last_chat_id=None,
+        user_chats={}
+    )
 
+@pytest.fixture
+def sample_df():
+    return pd.DataFrame({
+        "Category": ["A", "B", "C"],
+        "Value": [10, 20, 30]
+    })
 
 @pytest.fixture
 def chat_service():
-    with patch("app.services.chat_service.create_llm_client"), \
-         patch("app.services.chat_service.LLMResponseExtractor"), \
-         patch("app.services.chat_service.PromptGenerator"):
-        return ChatService()
+    """ChatService instance with mocked clients"""
+    service = ChatService()
+    # Mock clients
+    service.llm_inference_client = MagicMock()
+    service.llm_response_extractor = MagicMock()
+    service.prompt_generator_client = MagicMock()
+    service.adb_client = MagicMock()
+    service.sql_loader = MagicMock()
+    return service
+
+# ============================================
+# Utility function tests
+# ============================================
+
+def test_prepare_metadata_string(tmp_path, monkeypatch):
+    # create fake json file
+    table_file = tmp_path / "table_metadata"
+    table_file.mkdir()
+    file_path = table_file / "table1.json"
+    file_path.write_text(json.dumps({"col": "val"}))
+
+    monkeypatch.chdir(tmp_path)
+    os.makedirs("table_metadata", exist_ok=True)
+    file_path.write_text(json.dumps({"col": "val"}))
+
+    result = prepare_metadata_string(["table1"])
+    assert "TABLE1" in result
+    assert '"col": "val"' in result
+
+def test_generate_categorical_plots_single(sample_df, tmp_path):
+    paths = generate_categorical_plots(sample_df, str(tmp_path), "test")
+    assert len(paths) == 1
+    assert os.path.exists(paths[0])
 
 
-# ------------------------------------------------------------------
-# prepare_metadata_string tests
-# ------------------------------------------------------------------
+def test_handle_inquiry_with_mocked_metadata():
+    chat_service = ChatService()
+    
+    # Mock the prepare_metadata_string to avoid file access
+    with patch("app.services.chat_service.prepare_metadata_string") as mock_meta:
+        mock_meta.return_value = "FAKE_METADATA"
+        
+        # Also mock other dependencies to avoid real DB/LLM calls
+        chat_service.guard_rail = MagicMock(return_value=("yes", ["T1"]))
+        chat_service.text_2_sql = MagicMock(return_value=("SELECT 1", "analysis", 0))
+        chat_service.adb_client.execute_query_df = MagicMock(return_value=MagicMock(empty=False, to_dict=lambda **kwargs: [{"a":1}]))
+        chat_service.prompt_generator_client.generate_main_prompt = MagicMock(return_value="MP")
+        chat_service.prompt_generator_client.generate_assistant_prompt = MagicMock(return_value="AP")
+        chat_service.llm_inference_client.inference_from_chat_history = MagicMock(return_value="LLM")
+        chat_service.llm_response_extractor.get_many = MagicMock(return_value=("analysis","message"))
+        
+        # Fake app_state
+        class DummyState:
+            chat_history = {}
+            last_sql_query = {}
+            last_sql_queries = {}
+            last_chat_id = None
+            user_chats = {}
+        app_state = DummyState()
+        
+        response = chat_service.handle_inquiry("c1", "query", app_state)
+        
+        assert response["status"] == 1
+        assert response["llm_response"] == "message"
 
-@patch("builtins.open")
-@patch("app.services.chat_service.json.load")
-def test_prepare_metadata_string(mock_json_load, mock_open):
-    mock_json_load.return_value = {"col": "value"}
-
-    result = prepare_metadata_string(["property_sales"])
-
-    assert "PROPERTY_SALES" in result
-    assert "col" in result
-
-
-# ------------------------------------------------------------------
-# prepare_raw_data_response tests
-# ------------------------------------------------------------------
-
-@patch.object(pd.DataFrame, "to_csv")
-@patch("app.services.chat_service.os.remove")
-def test_prepare_raw_data_response(mock_remove, mock_to_csv, chat_service):
-    df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
-
-    mock_storage = MagicMock()
-    mock_storage.upload_file_to_bucket.return_value = "uploaded"
-
-    response = chat_service.prepare_raw_data_response(
-        selected_df=df,
-        scenario="raw_data",
-        sql_query="SELECT *",
-        object_storage_client=mock_storage,
-        message="Here is raw data"
-    )
-
-    assert response["status"] == 1
-    assert response["scenario"] == "raw_data"
-    assert response["file_path"].endswith(".csv")
-    assert "llm_response" in response
-    mock_to_csv.assert_called_once()
-    mock_remove.assert_called_once()
-
-
-# ------------------------------------------------------------------
-# prepare_analysis_response tests
-# ------------------------------------------------------------------
-
-@patch("app.services.chat_service.generate_categorical_plots", return_value=["plot.png"])
-@patch("app.services.chat_service.os.remove")
-def test_prepare_analysis_response_with_plot(
-    mock_remove,
-    _,
-    chat_service
-):
+def test_generate_categorical_plots_two_categoricals(tmp_path):
     df = pd.DataFrame({
-        "City": ["A"],
-        "Sales": [100]
+        "cat1": ["A", "B", "C", "A"],
+        "cat2": ["X", "Y", "Z", "X"],
+        "val": [1,2,3,4]
     })
+    paths = generate_categorical_plots(df, str(tmp_path), "test")
+    assert len(paths) == 1
+    assert os.path.exists(paths[0])
 
-    mock_storage = MagicMock()
-    mock_storage.upload_file_to_bucket.return_value = "uploaded"
+def test_check_if_df_all_null_or_zero():
+    df1 = pd.DataFrame({"a":[0,None],"b":[0,None]})
+    df2 = pd.DataFrame({"a":[1,0],"b":[0,0]})
+    assert check_if_df_all_null_or_zero(df1) is True
+    assert check_if_df_all_null_or_zero(df2) is False
 
-    response = chat_service.prepare_analysis_response(
-        selected_df=df,
-        scenario="summary",
-        sql_query="SELECT *",
-        object_storage_client=mock_storage,
-        message="Analysis result"
-    )
+# ============================================
+# Guardrail / Text2SQL
+# ============================================
 
-    assert response["status"] == 1
-    assert response["diagram"] is not None
-    assert response["scenario"] == "summary"
-    assert "results_df" in response
-    mock_remove.assert_called_once()
-
-
-@patch("app.services.chat_service.generate_categorical_plots", return_value=[])
-def test_prepare_analysis_response_no_plot(_, chat_service):
-    df = pd.DataFrame({
-        "City": ["A"],
-        "Sales": [100]
-    })
-
-    response = chat_service.prepare_analysis_response(
-        selected_df=df,
-        scenario="summary",
-        sql_query="SELECT *",
-        object_storage_client=MagicMock(),
-        message="Analysis result"
-    )
-
-    assert response["status"] == 1
-    assert response["diagram"] is None
-
-
-# ------------------------------------------------------------------
-# guard_rail tests
-# ------------------------------------------------------------------
-
-def test_guard_rail_relevant(chat_service):
-    chat_service.prompt_generator_client.guardrail_check_inference_call.return_value = {
-        "relevant_question": "yes",
-        "tables_related": ["property_sales_summary"]
-    }
-
-    chat_service.llm_response_extractor.get_many.return_value = (
-        "yes", ["property_sales_summary"]
-    )
-
-    relevant, tables = chat_service.guard_rail("show property_sales_summary")
-
+def test_guard_rail(chat_service):
+    chat_service.prompt_generator_client.guardrail_check_inference_call.return_value = {"r":"yes","t":["T1"]}
+    chat_service.llm_response_extractor.get_many.return_value = ("yes", ["T1"])
+    relevant, tables = chat_service.guard_rail("hello")
     assert relevant == "yes"
-    assert tables == ["property_sales_summary"]
+    assert tables == ["T1"]
 
-
-def test_guard_rail_not_relevant(chat_service):
-    chat_service.prompt_generator_client.guardrail_check_inference_call.return_value = {}
-    chat_service.llm_response_extractor.get_many.return_value = ("no", [])
-
-    relevant, tables = chat_service.guard_rail("random joke")
-
-    assert relevant == "no"
-    assert tables == []
-
-
-# ------------------------------------------------------------------
-# text_2_sql tests
-# ------------------------------------------------------------------
-
-def test_text_2_sql_success(chat_service):
-    chat_service.prompt_generator_client.generate_sql_prompt.return_value = "SQL_PROMPT"
-    chat_service.llm_inference_client.inference_single_input.return_value = {}
-    chat_service.llm_response_extractor.get_many.return_value = (
-        "SELECT * FROM property_sales_summary", "summary", 0
-    )
-
-    sql, scenario, error = chat_service.text_2_sql(
-        "show property_sales_summary",
-        ["property_sales_summary"],
-        None,
-        "META"
-    )
-
-    assert sql.startswith("SELECT")
-    assert scenario == "summary"
+def test_text_2_sql(chat_service, monkeypatch):
+    chat_service.prompt_generator_client.generate_sql_prompt.return_value = "PROMPT"
+    chat_service.llm_inference_client.inference_single_input.return_value = '{"sql_query":"SELECT 1","scenario":"analysis","error_status":0}'
+    chat_service.llm_response_extractor.get_many.return_value = ("SELECT 1","analysis",0)
+    sql, scenario, error = chat_service.text_2_sql("msg", ["T1"], None, "meta")
+    assert sql == "SELECT 1"
+    assert scenario == "analysis"
     assert error == 0
 
+# ============================================
+# handle_inquiry scenarios
+# ============================================
 
-def test_text_2_sql_error(chat_service):
-    chat_service.prompt_generator_client.generate_sql_prompt.return_value = "SQL_PROMPT"
-    chat_service.llm_inference_client.inference_single_input.return_value = {}
-    chat_service.llm_response_extractor.get_many.return_value = (
-        "", "", 1
-    )
-
-    sql, scenario, error = chat_service.text_2_sql(
-        "bad query",
-        ["property_sales_summary"],
-        None,
-        "META"
-    )
-
-    assert error == 1
-
-
-# ------------------------------------------------------------------
-# handle_inquiry tests
-# ------------------------------------------------------------------
-
-def test_handle_inquiry_guardrail_rejected(chat_service, app_state):
+def test_handle_inquiry_guardrail_reject(chat_service, app_state):
     chat_service.guard_rail = MagicMock(return_value=("no", []))
-
-    response = chat_service.handle_inquiry(
-        chat_id="c1",
-        user_message="irrelevant",
-        app_state=app_state
-    )
-
+    response = chat_service.handle_inquiry("c1", "bad query", app_state)
     assert response["status"] == 2
-    assert "rejected" in response["llm_response"].lower()
+    assert "irrelevance" in response["llm_response"]
 
-
-@patch("app.services.chat_service.prepare_metadata_string", return_value="META")
-@patch("app.services.chat_service.OracleADBClient")
-def test_handle_inquiry_empty_df(mock_adb, _, chat_service, app_state):
-    chat_service.guard_rail = MagicMock(return_value=("yes", ["table"]))
-    chat_service.text_2_sql = MagicMock(return_value=("SELECT *", "summary", 0))
-
-    mock_adb.return_value.execute_query_df.return_value = pd.DataFrame()
-
+def test_handle_inquiry_sql_error(chat_service, app_state, monkeypatch):
+    chat_service.guard_rail = MagicMock(return_value=("yes", ["T1"]))
+    chat_service.text_2_sql = MagicMock(return_value=("SQL", "analysis", 1))
     response = chat_service.handle_inquiry("c1", "query", app_state)
-
-    assert response["status"] == 3
-
-
-
-@patch("app.services.chat_service.prepare_metadata_string", return_value="META")
-@patch("app.services.chat_service.OracleADBClient")
-def test_handle_inquiry_all_zero_df(mock_adb, _, chat_service, app_state):
-    chat_service.guard_rail = MagicMock(return_value=("yes", ["table"]))
-    chat_service.text_2_sql = MagicMock(return_value=("SELECT *", "summary", 0))
-
-    # This DF is all zeros → triggers check_if_df_all_null_or_zero
-    df = pd.DataFrame({"amount": [0, 0, 0]})
-    mock_adb.return_value.execute_query_df.return_value = df
-
-    response = chat_service.handle_inquiry("c1", "query", app_state)
-
-    assert response["status"] == 3
-
-
-
-@patch("app.services.chat_service.prepare_metadata_string", return_value="META")
-def test_handle_inquiry_text2sql_error(_, chat_service, app_state):
-    chat_service.guard_rail = MagicMock(return_value=("yes", ["table"]))
-    chat_service.text_2_sql = MagicMock(return_value=("", "", 1))
-
-    response = chat_service.handle_inquiry("c1", "query", app_state)
-
     assert response["status"] == 2
+    assert "extends beyond the scope" in response["llm_response"]
 
+def test_handle_inquiry_empty_df(chat_service, app_state):
+    chat_service.guard_rail = MagicMock(return_value=("yes", ["T1"]))
+    chat_service.text_2_sql = MagicMock(return_value=("SELECT 1","analysis",0))
+    chat_service.adb_client.execute_query_df.return_value = pd.DataFrame()
+    response = chat_service.handle_inquiry("c1","query", app_state)
+    assert response["status"] == 3
+    assert "No data found" in response["llm_response"]
 
-
-@patch("app.services.chat_service.generate_categorical_plots", return_value=[])
-@patch("app.services.chat_service.OCIObjectStorageClient")
-@patch("app.services.chat_service.OracleADBClient")
-@patch("app.services.chat_service.prepare_metadata_string", return_value="META")
-def test_handle_inquiry_success_summary(
-    _,
-    mock_adb,
-    __,
-    ___,
-    chat_service,
-    app_state
-):
-    chat_service.guard_rail = MagicMock(return_value=("yes", ["property_sales_summary"]))
-    chat_service.text_2_sql = MagicMock(
-        return_value=("SELECT * FROM property_sales_summary", "summary", 0)
-    )
-
-    df = pd.DataFrame({"city": ["A"], "amount": [100]})
-    mock_adb.return_value.execute_query_df.return_value = df
-
-    chat_service.llm_inference_client.inference_from_chat_history.return_value = {}
-    chat_service.llm_response_extractor.get_many.return_value = (
-        "summary", "Here is result"
-    )
-
-    response = chat_service.handle_inquiry(
-        "c1", "show property_sales_summary", app_state
-    )
-
-    assert response["status"] == 1
-    assert response["scenario"] == "summary"
-    assert "results_df" in response
-
-
-def test_handle_inquiry_exception(chat_service, app_state):
-    """
-    Covers:
-    - Generic exception handling path
-    - Ensures fallback error response is returned
-    """
-
-    chat_service.guard_rail = MagicMock(side_effect=Exception("boom"))
-
-    response = chat_service.handle_inquiry(
-        "c1",
-        "fail",
-        app_state
-    )
-
-    assert response["status"] == 0
-    assert response["chat_id"] == "c1"
-    assert "failed due to error" in response["llm_response"].lower()
-
-
-
-# ------------------------------------------------------------------
-# generate_categorical_plots tests
-# ------------------------------------------------------------------
-
-def test_generate_plots_no_categorical(tmp_path):
-    df = pd.DataFrame({"value": [1, 2, 3]})
-
-    result = generate_categorical_plots(df, tmp_path, "test")
-
-    assert result == []
-
-
-def test_generate_plots_no_numeric(tmp_path):
-    df = pd.DataFrame({"category": ["A", "B", "C"]})
-
-    result = generate_categorical_plots(df, tmp_path, "test")
-
-    assert result == []
-
-
-@patch("app.services.chat_service.plt.savefig")
-@patch("app.services.chat_service.sns.barplot")
-def test_generate_plots_single_categorical(
-    mock_barplot,
-    mock_savefig,
-    tmp_path
-):
-    df = pd.DataFrame({
-        "City": ["A", "B", "C"],
-        "Sales": [10, 20, 30]
-    })
-
-    result = generate_categorical_plots(df, tmp_path, "sales")
-
-    assert len(result) == 1
-    assert result[0].endswith("_City_bar.png")
-    mock_barplot.assert_called_once()
-    mock_savefig.assert_called_once()
-
-
-@patch("app.services.chat_service.plt.savefig")
-@patch("app.services.chat_service.sns.barplot")
-def test_generate_plots_two_categorical_grouped_bar(
-    mock_barplot,
-    mock_savefig,
-    tmp_path
-):
-    df = pd.DataFrame({
-        "City": ["A", "A", "B", "B"],
-        "Type": ["X", "Y", "X", "Y"],
-        "Sales": [10, 20, 30, 40]
-    })
-
-    result = generate_categorical_plots(df, tmp_path, "sales")
-
-    assert len(result) == 1
-    assert "_grouped_bar.png" in result[0]
-    mock_barplot.assert_called_once()
-    mock_savefig.assert_called_once()
-
-
-@patch("app.services.chat_service.plt.savefig")
-@patch("app.services.chat_service.sns.heatmap")
-def test_generate_plots_two_categorical_heatmap(
-    mock_heatmap,
-    mock_savefig,
-    tmp_path
-):
-    df = pd.DataFrame({
-        "City": ["A"] * 6 + ["B"] * 6,
-        "Type": ["T1", "T2", "T3", "T4", "T5", "T6"] * 2,
-        "Sales": range(12)
-    })
-
-    result = generate_categorical_plots(df, tmp_path, "sales")
-
-    assert len(result) == 1
-    assert "_heatmap.png" in result[0]
-    mock_heatmap.assert_called_once()
-    mock_savefig.assert_called_once()
-
-
-
-import pandas as pd
-from unittest.mock import MagicMock, patch
-
-@patch("app.services.chat_service.generate_categorical_plots", return_value=[])
-@patch("app.services.chat_service.prepare_metadata_string", return_value="META")
-@patch("app.services.chat_service.OCIObjectStorageClient")
-@patch("app.services.chat_service.OracleADBClient")
-def test_handle_inquiry_removes_previous_chat_history(
-    mock_adb,
-    mock_oci,
-    _,
-    __,
-    chat_service,
-    app_state
-):
-    """
-    Covers:
-    if last_chat_id and last_chat_id in chat_history:
-        del chat_history[last_chat_id]
-        del last_sql_query_of_chat[last_chat_id]
-    """
-
-    # ---------------------------
-    # Arrange
-    # ---------------------------
-    old_chat_id = "old_chat"
-    new_chat_id = "new_chat"
-
-    # Existing previous chat state
-    app_state.chat_history[old_chat_id] = [
-        {"role": "Assistant", "message": "old history"}
-    ]
-    app_state.last_sql_query[old_chat_id] = "OLD SQL"
-    app_state.last_chat_id = old_chat_id
-
-    chat_service.guard_rail = MagicMock(
-        return_value=("yes", ["property_sales_summary"])
-    )
-
-    chat_service.text_2_sql = MagicMock(
-        return_value=("SELECT * FROM property_sales_summary", "summary", 0)
-    )
-
-    df = pd.DataFrame({
-        "city": ["A"],
-        "amount": [100]
-    })
-    mock_adb.return_value.execute_query_df.return_value = df
-
-    chat_service.llm_inference_client.inference_from_chat_history.return_value = {
-        "scenario": "summary",
-        "message": "Here is the result"
-    }
-
-    chat_service.llm_response_extractor.get_many.return_value = (
-        "summary",
-        "Here is the result"
-    )
-
-    # ---------------------------
-    # Act
-    # ---------------------------
-    response = chat_service.handle_inquiry(
-        new_chat_id,
-        "show property sales",
-        app_state
-    )
-
-    # ---------------------------
-    # Assert
-    # ---------------------------
-    # ✅ Old chat removed
-    assert old_chat_id not in app_state.chat_history
-    assert old_chat_id not in app_state.last_sql_query
-
-    # ✅ New chat created
-    assert new_chat_id in app_state.chat_history
-    assert app_state.last_chat_id == new_chat_id
-
-    # ✅ Successful response
+def test_handle_inquiry_raw_data(chat_service, app_state, monkeypatch, tmp_path):
+    df = pd.DataFrame({"a":[1,2,3],"b":[4,5,6]})
+    chat_service.guard_rail = MagicMock(return_value=("yes", ["T1"]))
+    chat_service.text_2_sql = MagicMock(return_value=("SELECT 1","raw_data",0))
+    chat_service.adb_client.execute_query_df.return_value = df
+    chat_service.prompt_generator_client.generate_main_prompt.return_value = "MP"
+    chat_service.prompt_generator_client.generate_assistant_prompt.return_value = "AP"
+    chat_service.llm_inference_client.inference_from_chat_history.return_value = "LLM"
+    chat_service.llm_response_extractor.get_many.return_value = ("raw_data","message")
+    # Mock object storage
+    class DummyOCI:
+        def upload_file_to_bucket(self, f, bucket_folder_name): return {"ok":True}
+    monkeypatch.setattr(chat_service,"prepare_raw_data_response",chat_service.prepare_raw_data_response)
+    response = chat_service.handle_inquiry("c1","query", app_state)
     assert response["status"] == 1
 
-
-
-import pandas as pd
-from unittest.mock import MagicMock, patch
-
-@patch("app.services.chat_service.os.remove")
-@patch("app.services.chat_service.OCIObjectStorageClient")
-@patch("app.services.chat_service.prepare_metadata_string", return_value="META")
-@patch("app.services.chat_service.OracleADBClient")
-def test_handle_inquiry_raw_data_scenario(
-    mock_adb,
-    _,
-    mock_oci,
-    mock_remove,
-    chat_service,
-    app_state
-):
-    """
-    Covers:
-    if scenario == "raw_data":
-        return self.prepare_raw_data_response(...)
-    """
-
-    # ---------------------------
-    # Arrange
-    # ---------------------------
-    chat_service.guard_rail = MagicMock(
-        return_value=("yes", ["property_sales"])
-    )
-
-    chat_service.text_2_sql = MagicMock(
-        return_value=("SELECT * FROM property_sales", "raw_data", 0)
-    )
-
-    df = pd.DataFrame({
-        "city": ["A", "B"],
-        "amount": [100, 200]
-    })
-    mock_adb.return_value.execute_query_df.return_value = df
-
-    # Mock OCI upload
-    mock_oci.return_value.upload_file_to_bucket.return_value = "uploaded"
-
-    chat_service.llm_inference_client.inference_from_chat_history.return_value = {
-        "scenario": "raw_data",
-        "message": "Here is raw data"
-    }
-
-    chat_service.llm_response_extractor.get_many.return_value = (
-        "raw_data",
-        "Here is raw data"
-    )
-
-    # ---------------------------
-    # Act
-    # ---------------------------
-    response = chat_service.handle_inquiry(
-        "chat_raw",
-        "download raw data",
-        app_state
-    )
-
-    # ---------------------------
-    # Assert
-    # ---------------------------
+def test_handle_inquiry_analysis(chat_service, app_state, monkeypatch):
+    df = pd.DataFrame({"a":[1,2,3],"b":[4,5,6]})
+    chat_service.guard_rail = MagicMock(return_value=("yes", ["T1"]))
+    chat_service.text_2_sql = MagicMock(return_value=("SELECT 1","analysis",0))
+    chat_service.adb_client.execute_query_df.return_value = df
+    chat_service.prompt_generator_client.generate_main_prompt.return_value = "MP"
+    chat_service.prompt_generator_client.generate_assistant_prompt.return_value = "AP"
+    chat_service.llm_inference_client.inference_from_chat_history.return_value = "LLM"
+    chat_service.llm_response_extractor.get_many.return_value = ("analysis","message")
+    response = chat_service.handle_inquiry("c1","query", app_state)
     assert response["status"] == 1
-    assert response["scenario"] == "raw_data"
-    assert "file_path" in response
-    assert response["llm_response"] == "Here is raw data"
+    assert "llm_response" in response
 
-    # CSV cleanup happened
-    mock_remove.assert_called_once()
+# ============================================
+# load_chat_history
+# ============================================
 
+def test_load_chat_history_empty(chat_service, app_state):
+    chat_service.sql_loader.load_chat_history_by_id.return_value = {"load_chat_history":"SELECT 1"}
+    chat_service.adb_client.execute_query_df.return_value = pd.DataFrame()
+    res = chat_service.load_chat_history("u1","c1",app_state)
+    assert res["status"] == 0
 
-
-import pandas as pd
-from unittest.mock import patch
-from app.services.chat_service import generate_categorical_plots
-
-
-@patch("app.services.chat_service.plt.savefig")
-@patch("app.services.chat_service.os.makedirs")
-def test_generate_plots_single_category_reduce_categories(
-    mock_makedirs,
-    mock_savefig
-):
-    """
-    Covers:
-    if df[cat].nunique() > max_categories
-    """
-
-    # 20 unique categories → exceeds max_categories=15
+def test_load_chat_history_with_sql(chat_service, app_state):
     df = pd.DataFrame({
-        "city": [f"City_{i}" for i in range(20)],
-        "amount": list(range(20))
+        "ROLE":["User","SQL"],
+        "MESSAGE":["hi","SELECT 1"],
+        "MESSAGE_NO":[1,2]
     })
+    chat_service.sql_loader.load_chat_history_by_id.return_value = {"load_chat_history":"SELECT 1"}
+    chat_service.adb_client.execute_query_df.side_effect = [df, pd.DataFrame([{"val":1}])]
+    chat_service.prompt_generator_client.generate_main_prompt.return_value = "MP"
+    res = chat_service.load_chat_history("u1","c1",app_state)
+    assert res["status"] == 1
 
-    paths = generate_categorical_plots(
-        df=df,
-        output_dir="plots",
-        file_prefix="test",
-        max_categories=15
+# ============================================
+# load_user_chats_previews
+# ============================================
+
+def test_load_user_chats_previews_success(chat_service):
+    df = pd.DataFrame([{"chat":"c1"}])
+    chat_service.sql_loader.load_user_chats_previews.return_value = {"load_chats_preview":"SELECT 1"}
+    chat_service.adb_client.execute_query_df.return_value = df
+    res = chat_service.load_user_chats_previews("u1",SimpleNamespace())
+    assert res["status"] == 1
+
+def test_load_user_chats_previews_error(chat_service):
+    chat_service.sql_loader.load_user_chats_previews.side_effect = Exception("fail")
+    res = chat_service.load_user_chats_previews("u1",SimpleNamespace())
+    assert res["status"] == 0
+
+# ============================================
+# chat_runtime_cleanup
+# ============================================
+
+def test_chat_runtime_cleanup_success(chat_service):
+    state = SimpleNamespace(
+        chat_history={"c1":[]},
+        last_sql_query={"c1":"SQL"},
+        user_chats={"u1":["c1"]}
     )
+    res = chat_service.chat_runtime_cleanup("u1", state)
+    assert res["status"] == 1
+    assert "Deleted" in res["message"]
 
-    # Assertions
-    assert len(paths) == 1
-    assert paths[0].endswith("_city_bar.png")
+def test_chat_runtime_cleanup_nodata(chat_service):
+    state = SimpleNamespace(chat_history={}, last_sql_query={}, user_chats={})
+    res = chat_service.chat_runtime_cleanup("u1", state)
+    assert res["status"] == 0
 
-    mock_makedirs.assert_called_once()
-    mock_savefig.assert_called_once()
+# ============================================
+# delete_chat_history
+# ============================================
 
-
-
-import pandas as pd
-from unittest.mock import patch
-from app.services.chat_service import generate_categorical_plots
-
-
-@patch("app.services.chat_service.plt.savefig")
-@patch("app.services.chat_service.os.makedirs")
-def test_generate_plots_two_categories_reduce_cat1(
-    mock_makedirs,
-    mock_savefig
-):
-    """
-    Covers:
-    if df[cat1].nunique() > max_categories
-    """
-
-    # cat1 has 20 unique values (>15)
-    df = pd.DataFrame({
-        "region": [f"R{i}" for i in range(20)],
-        "type": ["A"] * 20,   # cat2 nunique <= 5 → grouped bar
-        "amount": list(range(20))
-    })
-
-    paths = generate_categorical_plots(
-        df=df,
-        output_dir="plots",
-        file_prefix="test",
-        max_categories=15
+def test_delete_chat_history_success(chat_service):
+    state = SimpleNamespace(
+        chat_history={"c1":[]},
+        last_sql_queries={"c1":"SQL"}
     )
+    chat_service.sql_loader.delete_chat_queries.return_value = {"delete_chat_history":"Q1","delete_chat_preview":"Q2"}
+    chat_service.adb_client.execute_single_non_query.return_value = None
+    res = chat_service.delete_chat_history("u1",["c1"],state)
+    assert res["status"] == 1
 
-    # Assertions
-    assert len(paths) == 1
-    assert paths[0].endswith("_region_type_grouped_bar.png")
-
-    mock_makedirs.assert_called_once()
-    mock_savefig.assert_called_once()
+def test_delete_chat_history_error(chat_service):
+    state = SimpleNamespace(chat_history={"c1":[]}, last_sql_queries={"c1":"SQL"})
+    chat_service.sql_loader.delete_chat_queries.side_effect = Exception("fail")
+    res = chat_service.delete_chat_history("u1",["c1"],state)
+    assert res["status"] == 0

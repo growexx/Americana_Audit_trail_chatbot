@@ -1,50 +1,156 @@
+import types
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from unittest.mock import MagicMock, patch
-import pandas as pd
-from app.api.routes.chat import router
-from app.services.chat_service import check_if_df_all_null_or_zero
+from unittest.mock import MagicMock
+import pytest
+from unittest.mock import ANY
+import json
+import unittest.mock
 
-from app.services.chat_service import ChatService
+# Import router module (adjust path if needed)
+from app.api.routes.chat import router, service
 
-@patch("app.api.routes.chat.service")
-def test_chat_inquiry_success(mock_service):
+
+# -------------------------------------------------------------------
+# Test App Fixture
+# -------------------------------------------------------------------
+
+@pytest.fixture
+def client(monkeypatch):
     """
-    Sonar-safe test:
-    - Mocks ChatService
-    - Verifies request → service wiring
+    Creates a FastAPI test app with mocked ChatService
     """
-
-    # Arrange
     app = FastAPI()
+
+    # Mock app.state (runtime memory)
     app.state.chat_history = {}
-    app.state.last_chat_id = ""
     app.state.last_sql_query = {}
+    app.state.last_sql_queries = {}
+    app.state.last_chat_id = None
+    app.state.user_chats = {}
 
-    app.include_router(router, prefix="/api/v1/chat")
-    client = TestClient(app)
+    # Attach router
+    app.include_router(router)
 
-    mock_service.handle_inquiry.return_value = {
-        "status": 1,
-        "response": "hello"
-    }
+    # Mock all ChatService methods
+    service.handle_inquiry = MagicMock(return_value={"status": 0, "data": "ok"})
+    service.load_chat_history = MagicMock(return_value={"status": 0, "history": []})
+    service.load_user_chats_previews = MagicMock(return_value={"status": 0, "chats": []})
+    service.chat_runtime_cleanup = MagicMock(return_value={"status": 0})
+    service.delete_chat_history = MagicMock(return_value={"status": 0})
 
+    return TestClient(app)
+
+
+# -------------------------------------------------------------------
+# /chat-inquiry
+# -------------------------------------------------------------------
+
+def test_chat_inquiry(client):
     payload = {
-        "chat_id": "chat123",
-        "user_message": "Hello bot"
+        "user_id": "u1",
+        "chat_id": "c1",
+        "user_message": "hello"
     }
 
-    # Act
-    response = client.post("/api/v1/chat/inquiry", json=payload)
+    response = client.post("/chat-inquiry", json=payload)
 
-    # Assert
     assert response.status_code == 200
-    assert response.json()["status"] == 1
+    assert response.json()["status"] == 0
 
-    mock_service.handle_inquiry.assert_called_once_with(
-        "chat123",
-        "Hello bot",
-        app.state
+    service.handle_inquiry.assert_called_once_with(
+        "u1", "c1", "hello", unittest.mock.ANY
     )
 
 
+# -------------------------------------------------------------------
+# /load-historical-chat
+# -------------------------------------------------------------------
+
+def test_load_chat_history(client):
+    payload = {
+        "user_id": "u1",
+        "chat_id": "c1"
+    }
+
+    response = client.post("/load-historical-chat", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == 0
+
+    service.load_chat_history.assert_called_once_with(
+        "u1", "c1", unittest.mock.ANY
+    )
+
+
+# -------------------------------------------------------------------
+# /load-chats-preview
+# -------------------------------------------------------------------
+
+def test_load_chat_previews(client):
+    payload = {
+        "user_id": "u1"
+    }
+
+    response = client.post("/load-chats-preview", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == 0
+
+    service.load_user_chats_previews.assert_called_once_with(
+        "u1", unittest.mock.ANY
+    )
+
+
+# -------------------------------------------------------------------
+# /user-signout
+# -------------------------------------------------------------------
+
+def test_user_signout(client):
+    payload = {
+        "user_id": "u1"
+    }
+
+    response = client.post("/user-signout", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == 0
+
+    service.chat_runtime_cleanup.assert_called_once_with(
+        "u1", unittest.mock.ANY
+    )
+
+
+# -------------------------------------------------------------------
+# /delete-chats
+# -------------------------------------------------------------------
+
+def test_delete_chats(client):
+    payload = {
+        "user_id": "u1",
+        "chat_ids": ["c1", "c2"]
+    }
+
+    response = client.delete("/delete-chats", data=json.dumps(payload), headers={"Content-Type":"application/json"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == 0
+
+    service.delete_chat_history.assert_called_once_with(
+        "u1", ["c1", "c2"], unittest.mock.ANY
+    )
+
+
+# -------------------------------------------------------------------
+# /view-state
+# -------------------------------------------------------------------
+
+def test_view_state(client):
+    response = client.get("/view-state")
+
+    assert response.status_code == 200
+    body = response.json()
+
+    assert "chat_history" in body["_state"]
+    assert "last_sql_query" in body
+    assert "user_chats" in body

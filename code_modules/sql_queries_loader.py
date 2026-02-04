@@ -45,4 +45,32 @@ class SqlQueryLoader:
             "delete_chat_preview": f"""DELETE FROM USER_CHATS WHERE chat_id = '{chat_id}'"""
         }
 
+    @staticmethod
+    def insert_user_chat(user_id: str, chat_id: str, title: str):
+        """
+        Return SQL to insert a new user chat preview row.
+        """
+        # Escape single quotes in title
+        title_safe = title.replace("'", "''")
+        return {
+            "insert_user_chat": (
+                f"INSERT INTO USER_CHATS (USER_ID, CHAT_ID, CHAT_TITLE) "
+                f"VALUES ('{user_id}', '{chat_id}', '{title_safe}')"
+            )
+        }
+
+    @staticmethod
+    def insert_chat_message(chat_id: str, message_no: int, role: str, message: str):
+        """
+        Return SQL to insert a single chat message row into CHAT_MESSAGES.
+        """
+        # Escape single quotes in message body
+        msg_safe = message.replace("'", "''")
+        return {
+            "insert_chat_message": (
+                f"INSERT INTO CHAT_MESSAGES (CHAT_ID, MESSAGE_NO, MESSAGE, ROLE) "
+                f"VALUES ('{chat_id}', {message_no}, '{msg_safe}', '{role}')"
+            )
+        }
+
 

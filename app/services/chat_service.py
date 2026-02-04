@@ -163,7 +163,7 @@ def check_if_df_all_null_or_zero(df: pd.DataFrame) -> bool:
     Returns:
         bool: True if all values are null or zero, otherwise False.
     """
-    return ((df.isna()) | (df == 0)).all().all()
+    return bool(((df.isna()) | (df == 0)).all().all())
 
 
 class JumpToFinally(Exception):
