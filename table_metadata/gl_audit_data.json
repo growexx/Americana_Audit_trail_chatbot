@@ -1,0 +1,137 @@
+{
+  "JE_BATCH_ID": {
+    "type": "NUMBER(15)"
+  },
+  "BATCH_NAME": {
+    "type": "VARCHAR2(100 CHAR)"
+  },
+  "BATCH_STATUS": {
+    "type": "VARCHAR2(1 CHAR)",
+    "values": ["P", "U", "f", "N"]
+  },
+  "BATCH_POSTED_DATE": {
+    "type": "DATE"
+  },
+  "BATCH_CREATED_AT": {
+    "type": "DATE"
+  },
+  "BATCH_RUNNING_TOTAL_DR": {
+    "type": "NUMBER"
+  },
+  "BATCH_RUNNING_TOTAL_CR": {
+    "type": "NUMBER"
+  },
+  "JE_HEADER_ID": {
+    "type": "NUMBER(15)"
+  },
+  "LEDGER_ID": {
+    "type": "NUMBER(15)"
+  },
+  "JE_CATEGORY": {
+    "type": "VARCHAR2(25 CHAR)"
+  },
+  "JE_SOURCE": {
+    "type": "VARCHAR2(25 CHAR)",
+    "values": ["AutoCopy","Budget Journal","Manual","Payables","Receivables","Spreadsheet",
+    "Payroll","Cost Management","Assets","Inventory","Cash Management","21","Revaluation",
+    "Global Intercompany","Property Manager","1","Purchasing"]
+  },
+  "HEADER_PERIOD_NAME": {
+    "type": "VARCHAR2(15 CHAR)",
+    "examples":["Mar-25","Jan-20","Jul-18","Apr-19"]
+  },
+  "NAME": {
+    "type": "VARCHAR2(100 CHAR)"
+  },
+  "CURRENCY_CODE": {
+    "type": "VARCHAR2(15 CHAR)",
+    "values": ["AED","EGP","EUR","KWD","QAR","SAR","USD","CHF","GBP","AUD","OMR","BHD"]
+  },
+  "STATUS": {
+    "type": "VARCHAR2(1 CHAR)",
+    "values": ["P", "U", "N"]
+  },
+  "RUNNING_TOTAL_DR": {
+    "type": "NUMBER"
+  },
+  "RUNNING_TOTAL_CR": {
+    "type": "NUMBER"
+  },
+  "HEADER_LAST_UPDATE_DATE": {
+    "type": "DATE"
+  },
+  "HEADER_LAST_UPDATED_BY": {
+    "type": "NUMBER(15)"
+  },
+  "HEADER_CREATION_DATE": {
+    "type": "DATE"
+  },
+  "HEADER_CREATED_BY": {
+    "type": "NUMBER(15)"
+  },
+  "JE_LINE_NUM": {
+    "type": "NUMBER(15)"
+  },
+  "ACCOUNTED_DR": {
+    "type": "NUMBER"
+  },
+  "ACCOUNTED_CR": {
+    "type": "NUMBER"
+  },
+  "LEDGER_NAME": {
+    "type": "VARCHAR2(30 CHAR)",
+    "values": [
+    "KSA GL", "KWT GL", "Senyorita_Ledger", "Senyorita_Ledger_2", 
+    "UAE GL", "ECC GL", "FF GL", "ICAPP GL", "Beefy GL", "AGE GL", 
+    "UAE GL USD", "ARCL GL", "FF-MENA GL", "ACFRS GL"]
+  },
+  "LEDGER_CATEGORY_CODE": {
+    "type": "VARCHAR2(30 CHAR)",
+    "values": ["PRIMARY", "SECONDARY"]
+  },
+  "CODE_COMBINATION_ID": {
+    "type": "NUMBER(15)"
+  },
+  "ACCOUNT_TYPE": {
+    "type": "VARCHAR2(1 CHAR)",
+    "values": ["A", "E", "L", "R","O"]
+  },
+  "ACCOUNT_CODE": {
+    "type": "VARCHAR2(25 CHAR)"
+  },
+  "PERIOD_NAME": {
+    "type": "VARCHAR2(15 CHAR)",
+    "examples":["Mar-25","Jan-20","Jul-18","Apr-19"]
+  },
+  "PERIOD_YEAR": {
+    "type": "NUMBER(15)",
+    "values": [2018,2019,2020,2021,2022,2023,2024,2025]
+  },
+  "APPLICATION_ID": {
+    "type": "NUMBER(15)",
+    "values": [101]
+  },
+  "CLOSING_STATUS": {
+    "type": "VARCHAR2(1 CHAR)",
+    "values": ["C","O","F"]
+  },
+  "LAST_UPDATE_LOGIN": {
+    "type": "NUMBER(15)"
+  },
+  "LAST_UPDATE_DATE": {
+    "type": "DATE"
+  },
+  "LAST_UPDATED_BY": {
+    "type": "NUMBER(15)",
+    "values": [1579, 2829, 3161, 3164, 3316, 7154,
+    2820, 1131, 1691, 1111, 15475, 7834, 13455, 3637, 5994]
+  },
+  "CREATION_DATE": {
+    "type": "DATE",
+    "examples": ["04-01-21","13-12-23","08-08-22","25-09-24"]
+  },
+  "CREATED_BY": {
+    "type": "NUMBER(15)",
+    "values": [1111,3082,3124,1579,5994]
+  }
+}
