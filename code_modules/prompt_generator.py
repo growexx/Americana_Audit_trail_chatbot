@@ -48,7 +48,7 @@ class PromptGenerator:
         return prompt
 
     @staticmethod
-    def generate_assistant_prompt(sql_query, df,scenario):
+    def generate_assistant_prompt(sql_query, df,num_of_records):
         """
         Generate the assistant prompt using SQL output and scenario context.
 
@@ -64,20 +64,15 @@ class PromptGenerator:
         Returns:
             str: A formatted assistant prompt ready for LLM inference.
         """
-        num_records,num_fields = df.shape
-        if num_records <= 25:
-            input_df = df.to_dict(orient="records")
-        else:
-            input_df = df.head(10).to_dict(orient="records")
+        num_fields = df.shape[1]
         prompt_template = Path("prompts/chatbot_assistant.txt").read_text()
-        assistanct_promt = prompt_template.format(
+        assistanct_prompt = prompt_template.format(
             sql_query=sql_query,
-            data_records=input_df,
-            num_records = num_records,
-            num_fields= num_fields,
-            scenario=scenario
+            data_records=df.head(25).to_dict(orient="records"),
+            num_records = num_of_records,
+            num_fields= num_fields
         )
-        return assistanct_promt
+        return assistanct_prompt
 
     @staticmethod
     def guardrail_check_inference_call(llm, user_input: str):
@@ -103,11 +98,12 @@ class PromptGenerator:
             str: A formatted text-to-SQL prompt.
         """
         if last_sql:
-            last_sql = f"Previous SQL (if any):\n" + last_sql
+            print(f"Last SQL: {type(last_sql)}")
+            last_sql = f"Previous SQL (if any):\n{last_sql}"
         else:
             last_sql = "────────────────────────"
 
-        template = Path("prompts/text_2_sql.txt").read_text()
+        template = Path("prompts/text_2_sql_ritu.txt").read_text()
         prompt = template.format(
             user_query=user_query,
             metadata=metadata,

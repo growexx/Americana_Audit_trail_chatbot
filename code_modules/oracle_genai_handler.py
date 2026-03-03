@@ -10,10 +10,12 @@ Key improvements:
 Dependencies:
 - OCI SDK for Python
 """
+import traceback
 import oci
 from oci.generative_ai_inference.models import GenericChatRequest, TextContent, Message
 from typing import List, Dict, Optional
 import logging
+from oci.exceptions import RequestException, ServiceError
 # Set up logging
 logger = logging.getLogger(__name__)
 
@@ -50,14 +52,14 @@ class LLMInference:
                     config=self.config,
                     service_endpoint=self.endpoint,
                     retry_strategy=oci.retry.NoneRetryStrategy(),
-                    timeout=(5, 60)
+                    timeout=(5, 30)
                 )
             )
             # Chat configuration
             self.chat_detail = oci.generative_ai_inference.models.ChatDetails(
                 compartment_id=self.compartment_id,
                 serving_mode=oci.generative_ai_inference.models.OnDemandServingMode(
-                    model_id=("ocid1.generativeaimodel.oc1.eu-frankfurt-1.amaaaaaask7dceyan6gecfjovk7wtgl3r65b5tmpuegfxojbp2mebjgtvhra")
+                    model_id=("ocid1.generativeaimodel.oc1.eu-frankfurt-1.amaaaaaask7dceyacn5rezarysrnds7bjsu6iy5nrxdvq6hyqcygode5o5xq")
                 )
             )
             logger.info("OCI LLM client initialized successfully")
@@ -79,14 +81,14 @@ class LLMInference:
         role_mapping = {
             "USER": "USER",
             "ASSISTANT": "ASSISTANT",
-            "SYSTEM": "USER"
+            "SYSTEM": "SYSTEM"
         }
         oci_role = role_mapping.get(role.upper(), "USER")
-        # Create text content
+
         content = TextContent()
         content.text = message
         content.type = 'TEXT'
-        # Create message
+
         oci_message = Message()
         oci_message.role = oci_role
         oci_message.content = [content]
@@ -101,16 +103,21 @@ class LLMInference:
         Returns:
             List[Message]: OCI formatted messages
         """
-        oci_messages = []
-        for msg in chat_history:
-            role = msg.get("role", "USER")
-            message = msg.get("message", "")
-            # Skip empty messages
-            if not message.strip():
-                continue
-            oci_message = self._convert_message_to_oci_format(role, message)
-            oci_messages.append(oci_message)
-        return oci_messages
+        try:
+            oci_messages = []
+            for msg in chat_history:
+                role = msg.get("role", "USER")
+                message = msg.get("message", "")
+                # Skip empty messages
+                if not message.strip():
+                    continue
+                oci_message = self._convert_message_to_oci_format(role, message)
+                oci_messages.append(oci_message)
+            return oci_messages
+        except Exception as e:
+            traceback.print_exc()
+            print(f"Failed to convert chat history to OCI format: {str(e)}")
+            raise
 
     def inference_from_chat_history(self, chat_history: List[Dict[str, str]]) -> str:
         """
@@ -129,12 +136,12 @@ class LLMInference:
             if not oci_messages:
                 logger.warning("No valid messages found in chat history")
                 return "I'm sorry, I didn't receive any valid messages to respond to."
-            # Create chat request
+
             chat_request = GenericChatRequest(
                 api_format=GenericChatRequest.API_FORMAT_GENERIC,
                 messages=oci_messages,
-                max_tokens=400,
-                temperature=0.1,
+                max_tokens=6000,
+                temperature=0,
                 frequency_penalty=0,
                 presence_penalty=0,
                 top_p=0.75
@@ -144,35 +151,26 @@ class LLMInference:
             chat_response = self.generative_ai_inference_client.chat(self.chat_detail)
             # Extract response text
             response_text = chat_response.data.chat_response.choices[0].message.content[0].text
+            print(f"LLM response text is {response_text}")
             logger.info(f"LLM inference successful, response length: {len(response_text)}")
-            return response_text , chat_response
+            return response_text
+        except RequestException as e:
+            if "read timed out" in str(e).lower():
+                logger.error("LLM request timed out.")
+                raise LLMInferenceError("LLM_TIMEOUT") from e
+            logger.error("LLM network error.")
+            raise LLMInferenceError("LLM_NETWORK_ERROR") from e
+        except ServiceError as e:
+            logger.error(f"LLM service error: {e.status}")
+            if e.status == 400:
+                raise LLMInferenceError("LLM_BAD_REQUEST") from e
+            raise LLMInferenceError("LLM_SERVICE_ERROR") from e
         except Exception as e:
             logger.error(f"LLM inference failed: {str(e)}")
+            traceback.print_exc()
             raise LLMInferenceError(f"Failed to generate LLM response") from e
 
-    def inference_simple(self, user_message: str, system_prompt: Optional[str] = None) -> str:
-        """
-        Simple inference for single message (backward compatibility).
-        Args:
-            user_message (str): User's message
-            system_prompt (str, optional): System prompt to prepend
-        Returns:
-            str: Generated response from the LLM
-        """
-        # Create simple chat history
-        chat_history = []
-        if system_prompt:
-            chat_history.append({
-                "role": "SYSTEM",
-                "message": system_prompt,
-                "timestamp": ""
-            })
-        chat_history.append({
-            "role": "USER",
-            "message": user_message,
-            "timestamp": ""
-        })
-        return self.inference_from_chat_history(chat_history)
+
 
     def inference_single_input(self, user_input: str, system_prompt: str) -> str:
         """
@@ -195,7 +193,7 @@ class LLMInference:
             chat_request = GenericChatRequest(
                 api_format=GenericChatRequest.API_FORMAT_GENERIC,
                 messages=oci_messages,
-                max_tokens=1800,
+                max_tokens=5000,
                 temperature=0,
                 frequency_penalty=0,
                 presence_penalty=0,
@@ -207,9 +205,21 @@ class LLMInference:
             # Extract response text
             response_text = chat_response.data.chat_response.choices[0].message.content[0].text
             logger.info(f"Single input inference called successfully.")
-            return response_text.strip() , chat_response
+            return response_text.strip()
+        except RequestException as e:
+            if "read timed out" in str(e).lower():
+                logger.error("LLM request timed out.")
+                return "LLM timeout error"
+            logger.error("LLM network error.")
+            raise LLMInferenceError("LLM_NETWORK_ERROR") from e
+        except ServiceError as e:
+            logger.error(f"LLM service error: {e.status}")
+            if e.status == 400:
+                return "It is found that Oracle Genai has marked this in appropriate content and rejected it."
+            raise LLMInferenceError("LLM_SERVICE_ERROR") from e
         except Exception as e:
             logger.error(f"Single input inference failed: {str(e)}")
+            traceback.print_exc()
             raise LLMInferenceError(f"Failed to generate LLM response") from e
 
 

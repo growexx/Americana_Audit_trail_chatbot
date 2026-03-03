@@ -7,9 +7,10 @@ It acts as a thin controller layer that validates input schemas
 and delegates business logic to the ChatService.
 """
 from fastapi import APIRouter
-from app.schemas.chat import ChatInquiryRequest , ChatLoadRequest , LoadChatsPreviewRequest ,SignoutRequest, ChatDeletionRequest
-from app.services.chat_service import ChatService 
+from app.schemas.chat import ChatInquiryRequest , ChatLoadRequest , LoadChatsPreviewRequest ,SignoutRequest, ChatDeletionRequest , AllChatDeletionRequest
+from app.services.chat_service import ChatService
 from fastapi import Request
+
 
 # ---------------------------------------------------------
 # Router initialization for chat-related endpoints
@@ -19,10 +20,10 @@ router = APIRouter()
 service = ChatService()
 
 @router.post("/chat-inquiry")
-def chat_inquiry(
+async def chat_inquiry(
     request: ChatInquiryRequest,
     req: Request
-):
+    ):
     """
     Handle a chat inquiry from the user.
 
@@ -43,7 +44,7 @@ def chat_inquiry(
             - LLM response
             - optional SQL query or data artifacts
     """
-    return service.handle_inquiry(
+    return await service.handle_inquiry(
         request.user_id,
         request.chat_id,
         request.user_message,
@@ -54,7 +55,7 @@ def chat_inquiry(
 def load_chat_history(
     request: ChatLoadRequest,
     req: Request
-):
+    ):
     """
     Handle a chat load request from the user.
 
@@ -84,7 +85,7 @@ def load_chat_history(
 def load_chat_previews(
     request: LoadChatsPreviewRequest,
     req: Request
-):
+    ):
     """
     Handle a loading of user chats from the user.
 
@@ -112,7 +113,7 @@ def load_chat_previews(
 def signout_processes(
     request: SignoutRequest,
     req: Request
-):
+    ):
     """
     Handle a Signout from the user.
 
@@ -138,7 +139,7 @@ def signout_processes(
 def delete_chats(
     request: ChatDeletionRequest,
     req: Request
-):
+    ):
     """
     Handle a chat Deletion request from the user.
 
@@ -161,7 +162,33 @@ def delete_chats(
         req.app.state
     )
 
+@router.delete("/delete-all_chats")
+def delete_all_chats(
+    request: AllChatDeletionRequest,
+    req: Request
+    ):
+    """
+    Handle a chat Deletion request from the user.
+
+    This endpoint receives a deletion from user,
+    forwards the request to the ChatService for deleting all chat_history for user
+
+    Args:
+        request (SignoutRequest): Validated request body containing
+            user_id ,chat_ids .
+        req (Request): FastAPI request object used to access
+            application-level state (chat history, last SQL query, etc.).
+
+    Returns:
+        dict: A response dictionary produced by ChatService, including:
+            - status code
+    """
+    return service.delete_all_chats_for_user(
+        request.user_id,
+        req.app.state
+    )
 
 @router.get("/view-state")
 def view_state(req: Request):
+    """Simple api for viewing state, for testing purpose only"""
     return req.app.state

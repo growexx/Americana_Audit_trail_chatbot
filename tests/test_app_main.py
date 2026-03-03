@@ -1,67 +1,93 @@
 import sys
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 # ------------------------------------------------------------------
-# Mock heavy / optional dependencies BEFORE importing the FastAPI app
+# Mock heavy dependencies BEFORE importing app
 # ------------------------------------------------------------------
 sys.modules["seaborn"] = MagicMock()
 
 # ------------------------------------------------------------------
-# Now imports are safe
+# Mock ChatService BEFORE importing app
+# IMPORTANT: patch where it is USED (app.main.chat.service)
 # ------------------------------------------------------------------
-from fastapi.testclient import TestClient
-from app.main import app
+mock_adb_client = MagicMock()
+mock_service = MagicMock()
+mock_service.adb_client = mock_adb_client
 
-# ------------------------------------------------------------------
-# Create TestClient AFTER app is imported
-# ------------------------------------------------------------------
-client = TestClient(app)
+with patch("app.main.chat.service", mock_service):
+    from fastapi.testclient import TestClient
+    from app.main import app
 
+
+# ---------------------------------------------------------
+# Basic App Tests
+# ---------------------------------------------------------
 
 def test_app_starts():
-    """
-    Ensure FastAPI application starts without errors.
-    """
-    response = client.get("/")
-    assert response.status_code == 404
+    with TestClient(app) as client:
+        response = client.get("/")
+        assert response.status_code == 404
 
+
+def test_app_title():
+    assert app.title == "Americana Audit Bot Fast API"
+
+
+# ---------------------------------------------------------
+# Middleware Tests
+# ---------------------------------------------------------
 
 def test_cors_middleware_configured():
-    """
-    Verify CORS middleware is registered.
-    """
-    middleware_classes = [
-        middleware.cls.__name__
-        for middleware in app.user_middleware
-    ]
+    cors_middleware = next(
+        (m for m in app.user_middleware if m.cls.__name__ == "CORSMiddleware"),
+        None
+    )
 
-    assert "CORSMiddleware" in middleware_classes
+    assert cors_middleware is not None
+    assert cors_middleware.kwargs["allow_origins"] == ["*"]
+    assert cors_middleware.kwargs["allow_methods"] == ["*"]
+    assert cors_middleware.kwargs["allow_headers"] == ["*"]
+    assert cors_middleware.kwargs["allow_credentials"] is True
 
+
+# ---------------------------------------------------------
+# App State Tests (UPDATED)
+# ---------------------------------------------------------
 
 def test_app_state_initialized():
-    """
-    Ensure application state variables are initialized.
-    """
+    assert isinstance(app.state.last_user_chat, dict)
     assert isinstance(app.state.chat_history, dict)
-    assert isinstance(app.state.last_sql_query, dict)
-    assert isinstance(app.state.last_chat_id, str)
+    assert isinstance(app.state.last_sql_queries, dict)
 
+    assert app.state.last_user_chat == {}
     assert app.state.chat_history == {}
-    assert app.state.last_sql_query == {}
-    assert app.state.last_chat_id == ""
+    assert app.state.last_sql_queries == {}
 
+
+# ---------------------------------------------------------
+# Router Tests
+# ---------------------------------------------------------
 
 def test_chat_router_registered():
-    """
-    Ensure chat router endpoints are registered.
-    """
     routes = [route.path for route in app.routes]
     assert any(path.startswith("/api/v1/chat") for path in routes)
 
 
-# def test_upload_router_registered():
-#     """
-#     Ensure upload router endpoints are registered.
-#     """
-#     routes = [route.path for route in app.routes]
-#     assert any(path.startswith("/api/v1/upload") for path in routes)
+# ---------------------------------------------------------
+# Lifespan Tests (UPDATED)
+# ---------------------------------------------------------
+
+def test_lifespan_startup_and_shutdown():
+    """
+    Verify init_pool() is called on startup
+    and close_pool() is called on shutdown.
+    """
+
+    with patch("app.main.chat.service.adb_client") as mock_adb_client:
+
+        from app.main import app  # import AFTER patch
+
+        with TestClient(app):
+            mock_adb_client.init_pool.assert_called_once()
+
+        mock_adb_client.close_pool.assert_called_once()

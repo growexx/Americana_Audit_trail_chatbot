@@ -30,20 +30,18 @@ def test_generate_assistant_prompt_small_dataframe():
         "DATA:{data_records}\n"
         "ROWS:{num_records}\n"
         "COLS:{num_fields}\n"
-        "SCENARIO:{scenario}"
     )
 
     with patch.object(Path, "read_text", return_value=template):
         result = generator.generate_assistant_prompt(
             sql_query="SELECT * FROM test",
             df=df,
-            scenario="summary"
+            num_of_records=len(df)   # ✅ NEW
         )
 
     assert "SELECT * FROM test" in result
     assert "ROWS:2" in result
     assert "COLS:2" in result
-    assert "summary" in result
 
 
 def test_generate_assistant_prompt_large_dataframe_uses_head():
@@ -59,12 +57,13 @@ def test_generate_assistant_prompt_large_dataframe_uses_head():
         result = generator.generate_assistant_prompt(
             sql_query="SQL",
             df=df,
-            scenario="test"
+            num_of_records=len(df)  # ✅ NEW
         )
 
-    # Only first 10 records should be present
-    assert len(eval(result.replace("DATA:", ""))) == 10
+    records = eval(result.replace("DATA:", ""))
 
+    # New logic returns head(25)
+    assert len(records) == 25
 
 def test_guardrail_check_inference_call():
     generator = PromptGenerator()

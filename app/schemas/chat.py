@@ -23,7 +23,7 @@ class LoadChatsPreviewRequest(BaseModel):
     Load Chat Previes for Front End
     """
     user_id: str
-    
+
 class SignoutRequest(BaseModel):
     """
     Signout Request only requires user input and Chat id.
@@ -36,3 +36,9 @@ class ChatDeletionRequest(BaseModel):
     """
     user_id: str
     chat_ids: list
+
+class AllChatDeletionRequest(BaseModel):
+    """
+    Chat Deletion Request only requires user input and Chat id.
+    """
+    user_id: str
